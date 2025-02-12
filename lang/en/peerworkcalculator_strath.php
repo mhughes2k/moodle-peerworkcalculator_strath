@@ -17,11 +17,11 @@
 /**
  * Lang strings.
  *
- * @package   peerworkcalculator_webpa
- * @copyright 2020 Amanda Doughty
+ * @package   peerworkcalculator_strath
+ * @copyright 2025 Michael Hughes
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-$string['pluginname'] = 'WebPA calculator';
-$string['privacy:metadata'] = 'The webPA calculator does not store data.';
-$string['webpa'] = 'Web PA';
+$string['pluginname'] = 'Strathclyde Peer Assessment calculator';
+$string['privacy:metadata'] = 'The Strath calculator does not store data.';
+$string['webpa'] = 'Strath PA';
