@@ -69,6 +69,8 @@ class calculator extends peerworkcalculator_plugin
         $numsubmitted = 0;
         echo '<pre>';
         var_dump($memberids);
+        // $grades is an array of arrays, each array is a student's 
+        // grades for the other students, for each criteria.
         var_dump($grades);
         echo '</pre>';
         $pascores = [];
