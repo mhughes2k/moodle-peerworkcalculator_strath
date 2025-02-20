@@ -59,28 +59,32 @@ class calculator extends peerworkcalculator_plugin
         $instance = $this->peerwork->id;
         $key = "{$instance}_gradeitem";
         $gradeitemid = get_config('peerworkcalculator_strath', $key);
-        $gradeitem = \grade_item::fetch(['id'=>$gradeitemid]);
+
+        $gradegrades = [];
+        if ($gradeitemid !== false) {
+            $gradeitem = \grade_item::fetch(['id' => $gradeitemid]);
 
 //        $cm = get_coursemodule_from_instance()
-        //        grade_get_grade_items_for_activity();
-        $gradeitems = grade_get_grades(
-            $gradeitem->courseid,
-            $gradeitem->itemtype,
-            $gradeitem->itemmodule,
-            $gradeitem->iteminstance,
-            $memberids
-        );
-        if (count($gradeitems->items) != 1) {
-            throw new \coding_exception("too many / few grade items");
+            //        grade_get_grade_items_for_activity();
+            $gradeitems = grade_get_grades(
+                $gradeitem->courseid,
+                $gradeitem->itemtype,
+                $gradeitem->itemmodule,
+                $gradeitem->iteminstance,
+                $memberids
+            );
+            if (count($gradeitems->items) != 1) {
+                throw new \coding_exception("too many / few grade items");
+            }
+
+            $gradeitem = $gradeitems->items[0];
+
+            // Target activity grades in grade book indexed by user id.
+            $gradegrades = $gradeitem->grades;
+            $gradegrades = array_map(function ($grade) {
+                return $grade->grade;
+            }, $gradegrades);
         }
-
-        $gradeitem = $gradeitems->items[0];
-
-        // Target activity grades in grade book indexed by user id.
-        $gradegrades = $gradeitem->grades;
-        $gradegrades = array_map(function($grade) {
-            return $grade->grade;
-        },$gradegrades);
 
         // Calculate the total scores.
         foreach ($memberids as $memberid) {
@@ -127,11 +131,21 @@ class calculator extends peerworkcalculator_plugin
             }
         }
 
+        // We change the grades so that it matches the gradebook provided grades.
+        $prelimgrades = [];
+        if ($gradeitemid !== false) {
+            $prelimgrades = $gradegrades;
+        } else {
+            // Calculate the students' preliminary grade (excludes weighting and penalties).
+            $prelimgrades = array_map(function($score) use ($groupmark) {
+                return max(0, min(100, $score * $groupmark));
+            }, $webpascores);
+        }
+
         // Calculate penalties.
         $noncompletionpenalties = array_reduce($memberids, function($carry, $memberid) use ($fracscores, $noncompletionpenalty) {
             $ispenalised = empty($fracscores[$memberid]);
             $carry[$memberid] = $ispenalised ? $noncompletionpenalty : 0;
-//            $carry[$memberid] = 0;
             return $carry;
         });
 
@@ -145,12 +159,20 @@ class calculator extends peerworkcalculator_plugin
         // Calculate the grades again, but with weighting and penalties.
         $grades = array_reduce(
             $memberids,
-            function($carry, $memberid) use ($webpascores, $noncompletionpenalties, $groupmark, $paweighting, $gradegrades) {
+            function($carry, $memberid) use ($webpascores, $noncompletionpenalties, $groupmark, $paweighting, $gradegrades, $gradeitemid) {
                 // Use the gradebook grade.
-                $grade = $gradegrades[$memberid];
+                if ($gradeitemid !== false) {
+                    $groupmark = $gradegrades[$memberid];
+                }
+                $score = $webpascores[$memberid];
+
+                $adjustedgroupmark = $groupmark * $paweighting;
+                $automaticgrade = $groupmark - $adjustedgroupmark;
+                $grade = max(0, min(100, $automaticgrade + ($score * $adjustedgroupmark)));
+
                 $penaltyamount = $noncompletionpenalties[$memberid];
                 if ($penaltyamount > 0) {
-                    $grade = $grade - ($penaltyamount * 100);
+                    $grade = max(0, ($grade - ($penaltyamount * 100)));
                 }
 
                 $carry[$memberid] = $grade;
@@ -158,8 +180,7 @@ class calculator extends peerworkcalculator_plugin
             },
             []);
 
-        // We change the grades so that it matches the gradebook provided grades.
-        $prelimgrades = $gradegrades;
+
 
         $result = new \mod_peerwork\pa_result(
             $fracscores,
@@ -305,17 +326,18 @@ class calculator extends peerworkcalculator_plugin
 
     function get_settings($mform) {
         global $COURSE;
-//        var_dump($COURSE);
+
         $instance = $mform->getElementValue('instance');
         $key = "{$instance}_gradeitem";
         $gradeitem = get_config('peerworkcalculator_strath', $key);
         $gradeitems = \grade_item::fetch_all(['courseid'=>$COURSE->id]);
-            //grade_get_grades($COURSE->id, 'mod', null, null);
+
         $gradeitems = array_map(function($gradeitem) {
-//            print_r($gradeitem);
             return $gradeitem->get_name();
         }, $gradeitems);
-        print_r($gradeitems);
+//        $gradeitems = array_merge([
+//            '' => get_string('manuallygraded', 'peerworkcalculator_strath')
+//        ], $gradeitems);
         $gi = $mform->createElement('autocomplete',
             'gradeitem',
             get_string('gradeitem', 'peerworkcalculator_strath'),
@@ -327,7 +349,11 @@ class calculator extends peerworkcalculator_plugin
     public function save_settings($formdata) {
         $instance = $formdata->instance;
         $key = "{$instance}_gradeitem";
-        set_config($key, $formdata->gradeitem, 'peerworkcalculator_strath');
+        if (empty($formdata->gradeitem)) {
+            unset_config($key, 'peerworkcalculator_strath');
+        } else {
+            set_config($key, $formdata->gradeitem, 'peerworkcalculator_strath');
+        }
         return true;
     }
     /**

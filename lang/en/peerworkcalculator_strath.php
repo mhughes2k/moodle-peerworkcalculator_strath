@@ -25,3 +25,6 @@
 $string['pluginname'] = 'Strathclyde Peer Assessment calculator';
 $string['privacy:metadata'] = 'The Strath calculator does not store data.';
 $string['webpa'] = 'Strath PA';
+$string['gradeitem'] = 'Grade item';
+$string['gradeitem_help'] = 'Grade item';
+$string['manuallygraded'] = 'Manually Graded';
